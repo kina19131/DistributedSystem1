@@ -42,10 +42,7 @@ public class KVClient implements IKVClient {
 
 		if(tokens[0].equals("quit")) {	
 			stop = true;
-            if (kvStore != null) {
-                kvStore.disconnect();
-                kvStore = null;
-            }
+            disconnect();
 			System.out.println(PROMPT + "Application exit!");
 		
 		} else if (tokens[0].equals("connect")){
@@ -69,9 +66,8 @@ public class KVClient implements IKVClient {
 			}
 			
 		} else if(tokens[0].equals("disconnect")) {
-			if (kvStore != null) {
-                kvStore.disconnect();
-            }
+			disconnect();
+
 		} else if(tokens[0].equals("logLevel")) {
 			if(tokens.length == 2) {
 				String level = setLevel(tokens[1]);
@@ -90,6 +86,7 @@ public class KVClient implements IKVClient {
 			
 		} else if(tokens[0].equals("help")) {
 			printHelp();
+        
 		} else {
 			printError("Unknown command");
 			printHelp();
@@ -119,6 +116,13 @@ public class KVClient implements IKVClient {
 
     private void printError(String error){
 		System.out.println(PROMPT + "Error! " +  error);
+	}
+
+    private void disconnect() {
+		if (kvStore != null) {
+			kvStore.disconnect();
+			kvStore = null;
+		}
 	}
 
     private String setLevel(String levelString) {
