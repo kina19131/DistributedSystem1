@@ -67,6 +67,7 @@ public class KVClient implements IKVClient {
 			
 		} else if(tokens[0].equals("disconnect")) {
 			disconnect();
+            System.out.println(PROMPT + "Disconnected from the server!");
 
 		} else if(tokens[0].equals("logLevel")) {
 			if(tokens.length == 2) {
@@ -156,23 +157,28 @@ public class KVClient implements IKVClient {
     private void printHelp() {
         StringBuilder sb = new StringBuilder();
         sb.append(PROMPT).append("ECHO CLIENT HELP (Usage):\n");
+        
         sb.append(PROMPT);
-        sb.append("::::::::::::::::::::::::::::::::");
-        sb.append("::::::::::::::::::::::::::::::::\n");
+        sb.append("=======================================");
+        sb.append("=======================================\n");
+        
         sb.append(PROMPT).append("connect <host> <port>");
-        sb.append("\t establishes a connection to a server\n");
+        sb.append("\t\t establishes a connection to a server\n");
         sb.append(PROMPT).append("disconnect");
-        sb.append("\t\t\t disconnects from the server \n");
+        sb.append("\t\t\t disconnects from the servers\n");
 
-        // TODO Add help for put/get requests
+        sb.append(PROMPT).append("put <key> <value>");
+        sb.append("\t\t inserts a key-value pair to the server\n");
+        sb.append(PROMPT).append("get <key>");
+        sb.append("\t\t\t retrieves the value for the key from the server\n");
         
         sb.append(PROMPT).append("logLevel");
-        sb.append("\t\t\t changes the logLevel \n");
+        sb.append("\t\t\t changes the logLevel\n");
         sb.append(PROMPT).append("\t\t\t\t ");
-        sb.append("ALL | DEBUG | INFO | WARN | ERROR | FATAL | OFF \n");
+        sb.append("ALL | DEBUG | INFO | WARN | ERROR | FATAL | OFF\n");
         
         sb.append(PROMPT).append("quit ");
-        sb.append("\t\t\t exits the program");
+        sb.append("\t\t\t\t exits the program");
         System.out.println(sb.toString());
     }
 
