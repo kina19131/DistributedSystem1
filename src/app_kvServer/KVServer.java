@@ -1,23 +1,21 @@
 package app_kvServer;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.io.IOException;
-
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-
-import java.util.Set;
 import java.util.Collections;
-import java.util.HashSet;
-
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
-import java.util.LinkedList;
-
-import java.util.logging.Logger;
+import java.util.Set;
 import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.Map.Entry; 
+
 
 
 public class KVServer implements IKVServer {
@@ -33,13 +31,15 @@ public class KVServer implements IKVServer {
 	 */
 
 	private ServerSocket serverSocket;
-	private boolean running = true; 
+	private int port; 
+
+	private boolean running; 
 
 	private Set<ClientHandler> activeClientHandlers;
 
 	private Map<String, String> storage;
     private Map<String, String> cache;
-    private Queue<String> cacheQueue; // For FIFO caching
+    private Queue<String> fifoQueue; // For FIFO caching
 	private Map<String, Integer> accessFrequency; // For LFU caching 
 
     private int cacheSize;
@@ -51,6 +51,7 @@ public class KVServer implements IKVServer {
 
 	public KVServer(int port, int cacheSize, String strategy) {
         this.port = port;
+		this.running = true; 
         this.cacheSize = cacheSize;
         this.strategy = IKVServer.CacheStrategy.valueOf(strategy);
 
@@ -61,7 +62,7 @@ public class KVServer implements IKVServer {
         if (cacheSize > 0) { // Initialize cache for all strategies if cacheSize > 0
             this.cache = new HashMap<>();
             if ("FIFO".equals(strategy)) {
-                this.cacheQueue = new LinkedList<>();
+                this.fifoQueue = new LinkedList<>();
             } else if ("LFU".equals(strategy)) {
                 this.accessFrequency = new HashMap<>();
             }
@@ -131,15 +132,14 @@ public class KVServer implements IKVServer {
 	@Override
     public String getKV(String key) throws Exception {
         String value;
-        if (inCache(key)) {
+        if (cache != null && inCache(key)) {
             value = cache.get(key);
             LOGGER.fine("Cache hit for key: " + key);
-        } else {
+        } 
+
+		if (value == null && inStorage(key)){
             value = storage.get(key);
-            LOGGER.fine("Cache miss for key: " + key);
-            if (value != null && cache != null) {
-                updateCache(key, value);
-            }
+            LOGGER.fine("Storage hit for key: " + key);
         }
         return value;
     }
@@ -177,13 +177,16 @@ public class KVServer implements IKVServer {
 		}
 	}
 
+	// FIFO: The oldest item is evicted when the cache is full.
+	// LRU: The least recently used item is evicted. Your implementation keeps the most recently used items at the end of the cache map.
+	// LFU: The least frequently used item is evicted. You use an accessFrequency map to track the access frequency of each key.
 	private void updateCacheFIFO(String key, String value) {
-        if (!cache.containsKey(key) && cacheQueue.size() >= cacheSize) {
-            String oldestKey = cacheQueue.poll();
+        if (!cache.containsKey(key) && fifoQueue.size() >= cacheSize) {
+            String oldestKey = fifoQueue.poll();
             cache.remove(oldestKey);
         }
         cache.put(key, value);
-        cacheQueue.add(key);
+        fifoQueue.add(key);
     }
 
     private void updateCacheLRU(String key, String value) {
@@ -205,23 +208,34 @@ public class KVServer implements IKVServer {
 		} 
 		else {
 			if (cache.size() >= cacheSize) {
-				String leastFrequentKey = Collections.min(accessFrequency.entrySet(), Map.Entry.comparingByValue()).getKey();
-				cache.remove(leastFrequentKey);
-				accessFrequency.remove(leastFrequentKey);
-			}
-			cache.put(key, value);
-			accessFrequency.put(key, 1);
+                String leastFrequentKey = findLeastFrequentKeyLFU(); // Use a separate method for Java 7 compatibility
+                cache.remove(leastFrequentKey);
+                accessFrequency.remove(leastFrequentKey);
+            }
+            cache.put(key, value);
+            accessFrequency.put(key, 1);
 		}
 	}
 	
+	private String findLeastFrequentKeyLFU() {
+        String leastFrequentKey = null;
+        int minFreq = Integer.MAX_VALUE;
+        for (Map.Entry<String, Integer> entry : accessFrequency.entrySet()) {
+            if (entry.getValue() < minFreq) {
+                minFreq = entry.getValue();
+                leastFrequentKey = entry.getKey();
+            }
+        }
+        return leastFrequentKey;
+    }
 
 	@Override
 	public void clearCache() {
 		if (cache != null) {
 			cache.clear();
 		}
-		if (cacheQueue != null) { // For FIFO
-			cacheQueue.clear();
+		if (fifoQueue != null) { // For FIFO
+			fifoQueue.clear();
 		}
 		if (accessFrequency != null) { // For LFU
 			accessFrequency.clear();
@@ -237,61 +251,80 @@ public class KVServer implements IKVServer {
 	}
 
 	@Override
-    public void run(){
-		// TODO Auto-generated method stub
-		while(running){
-			try{
-				Socket clientSocket = serverSocket.accept(); 
-				ClientHandler clientHandler = new ClientHandler(clientSocket, this);
-				activeClientHandlers.add(clientHandler);
-				clientHandler.start();
-			}
-			catch (IOException e){
-				LOGGER.log(Level.SEVERE, "Error accepting client connection", e);
-			}
-		}
-	}
+    public void run() {
+        try {
+            serverSocket = new ServerSocket(port);
+            LOGGER.info("KV Server started on port " + port);
+            running = true; // MODIFIED: Ensure running is set to true when server starts
+
+            while (running) {
+                try {
+                    Socket clientSocket = serverSocket.accept();
+                    ClientHandler handler = new ClientHandler(clientSocket, this); // MODIFIED: Ensure this line is correctly written
+                    new Thread(handler).start();
+                } catch (IOException e) {
+                    if (!running) {
+                        LOGGER.info("Server stopped.");
+                    } else {
+                        LOGGER.log(Level.SEVERE, "Error in server run", e);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, "Error starting server", e);
+        }
+    }
 
 
+	private void saveDataToStorage() {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter("kvstorage.txt"))) {
+            for (Entry<String, String> entry : storage.entrySet()) {
+                writer.write(entry.getKey() + "," + entry.getValue());
+                writer.newLine();
+            }
+            LOGGER.info("Storage data saved to file");
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, "Error saving data to storage", e);
+        }
+    }
+	
 	@Override
     public void close(){
 		// TODO Auto-generated method stub
-		// CLOSE CONNECTION WITH THE CLIENT?
-		this.running = false; 
-		// Close all active client connections
-		// For this, you need to keep track of all active client threads
-		// Assuming you have a collection 'activeClientHandlers' to track these
-		for (ClientHandler clientHandler : activeClientHandlers) {
-			clientHandler.closeConnection(); // closeConnection() needs to be implemented in ClientHandler
-		}
-
-		// Close the server socket
 		try {
-			if (serverSocket != null && !serverSocket.isClosed()) {
-				serverSocket.close();
-				LOGGER.info("Server socket closed");
-			}
-		} catch (IOException e) {
-			LOGGER.log(Level.SEVERE, "Error closing server socket", e);
-		}
+			running = false; 
 
-		// Perform any additional cleanup if necessary
-		// For example, saving state to disk, closing database connections, etc.
+			if (serverSocket != null && !serverSocket.isClosed()){
+				serverSocket.close(); 
+			}
+			// Optionally, wait for currently processing client handlers to complete
+        	// This might involve tracking active threads or using a thread pool
+
+			// Perform any necessary cleanup, like saving data to storage
+			saveDataToStorage(); // TO DO
+		}
+		catch (IOException e){
+			e.printStackTrace();
+		}
+		LOGGER.info("Server closed");
 	}
 
 	@Override
     public void kill(){
 		// TODO Auto-generated method stub
 		// STOP THE SERVER? 
-		this.running = false; 
+		running = false; 
 		try{
 			if(serverSocket != null && !serverSocket.isClosed()){
 				serverSocket.close(); 
-				LOGGER.info("Server Socket Closed")
 			}
+		// Immediately terminate any ongoing processing
+        // This might involve interrupting active threads or shutting down a thread pool
+
+		} catch (IOException e) {
+			// Handle exceptions, e.g., log them
+			e.printStackTrace();
 		}
-		catch (IOException e){
-			LOGGER.log(Level.SEVERE, "Error closing server socket", e); // 봐봐
-		}
+		LOGGER.info("Server Socket Closed");
 	}
 }
