@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.net.UnknownHostException;
 
 import client.KVCommInterface;
+import shared.messages.KVMessage;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -18,6 +19,8 @@ public class KVClient implements IKVClient {
 
     private static Logger logger = Logger.getRootLogger();
 	private static final String PROMPT = "KVClient> ";
+    private static final int MAX_KEY_BYTES = 20;
+    private static final int MAX_VAL_BYTES = 122880;
 	private BufferedReader stdin;
 	private boolean stop = false;
 	
@@ -69,6 +72,52 @@ public class KVClient implements IKVClient {
 			disconnect();
             System.out.println(PROMPT + "Disconnected from the server!");
 
+        } else if(tokens[0].equals("put")) {
+            if(tokens.length >= 2) {                
+                if(kvStore != null && kvStore.isRunning()) {
+					String key = tokens[1];                   
+                    if (key.length() > 0 && key.length() <= MAX_KEY_BYTES ) {
+                        String value = null;
+                        if (tokens.length > 2) {
+                            value = parseValue(cmdLine);  
+                        }
+                        if ((value == null) || (value != null && value.length() <= MAX_VAL_BYTES)) {
+                            try {
+                                KVMessage res = kvStore.put(key, value);
+                            } catch (Exception e) {
+                                printError("Unable to perform put request!");
+					            logger.error("Unable to perform put request!", e);
+                            }
+                        } else {
+                            printError("Invalid value length!");
+                        }
+                    } else {
+                        printError("Invalid key length!");
+                    }
+                } else {
+                    printError("Not connected!");
+                }
+			} else {
+				printError("Invalid number of parameters!");
+			}
+
+		} else if(tokens[0].equals("get")) {
+            if(tokens.length == 2) {
+				if(kvStore != null && kvStore.isRunning()){
+					String key = tokens[1];
+                    try {
+                        KVMessage res = kvStore.get(key);
+                    } catch (Exception e) {
+                        printError("Unable to perform get request!");
+					    logger.error("Unable to perform get request!", e);
+                    }
+				} else {
+					printError("Not connected!");
+				}
+			} else {
+				printError("Invalid number of parameters!");
+			}
+
 		} else if(tokens[0].equals("logLevel")) {
 			if(tokens.length == 2) {
 				String level = setLevel(tokens[1]);
@@ -92,27 +141,6 @@ public class KVClient implements IKVClient {
 			printError("Unknown command");
 			printHelp();
 		}
-
-        // TODO Adapt for put/get logic
-        // else  if (tokens[0].equals("send")) {
-		// 	if(tokens.length >= 2) {
-		// 		if(client != null && client.isRunning()){
-		// 			StringBuilder msg = new StringBuilder();
-		// 			for(int i = 1; i < tokens.length; i++) {
-		// 				msg.append(tokens[i]);
-		// 				if (i != tokens.length -1 ) {
-		// 					msg.append(" ");
-		// 				}
-		// 			}	
-		// 			sendMessage(msg.toString());
-		// 		} else {
-		// 			printError("Not connected!");
-		// 		}
-		// 	} else {
-		// 		printError("No message passed!");
-		// 	}
-			
-		// } 
 	}
 
     private void printError(String error){
@@ -125,6 +153,12 @@ public class KVClient implements IKVClient {
 			kvStore = null;
 		}
 	}
+
+    private String parseValue(String cmd){
+        int idxFirstSpace = cmd.indexOf(' ');
+        int idxSecondSpace = cmd.indexOf(' ', idxFirstSpace + 1);
+        return cmd.substring(idxSecondSpace + 1);
+    }
 
     private String setLevel(String levelString) {
 		

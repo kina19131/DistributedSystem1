@@ -33,4 +33,10 @@ public class KVStore implements KVCommInterface {
 		// TODO Auto-generated method stub
 		return null;
 	}
+
+	public boolean isRunning() {
+		// TODO Add actual logic
+		return false;
+	}
+
 }
