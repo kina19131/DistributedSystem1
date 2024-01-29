@@ -30,7 +30,7 @@ public class KVClient implements IKVClient {
     private KVStore kvStore = null;
 
     @Override
-    public void newConnection(String hostname, int port) throws UnknownHostException, Exception{
+    public void newConnection(String hostname, int port)  throws UnknownHostException, Exception {
         kvStore = new KVStore(hostname, port);
         kvStore.connect();
     }
