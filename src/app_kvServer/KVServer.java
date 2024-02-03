@@ -2,6 +2,13 @@ package app_kvServer;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.File;
+
+import java.util.ArrayList;
+import java.util.List;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -45,6 +52,8 @@ public class KVServer implements IKVServer {
 	// private Set<ClientHandler> activeClientHandlers = Collections.synchronizedSet(new HashSet<>());
 
 
+	private List<Thread> clientHandlerThreads;
+	
 	private Map<String, String> storage;
     private Map<String, String> cache;
     private Queue<String> fifoQueue; // For FIFO caching
@@ -53,7 +62,6 @@ public class KVServer implements IKVServer {
     private int cacheSize;
 	private IKVServer.CacheStrategy strategy; // Correct type for strategy
 
-	// private static final Logger LOGGER = Logger.getLogger(KVServer.class.getName());
 	private static final Logger LOGGER = Logger.getLogger(ClientHandler.class.getName());
 
 
@@ -63,8 +71,8 @@ public class KVServer implements IKVServer {
         this.cacheSize = cacheSize;
         this.strategy = IKVServer.CacheStrategy.valueOf(strategy);
 
+		this.clientHandlerThreads = new ArrayList<>();
 		this.activeClientHandlers = Collections.synchronizedSet(new HashSet<ClientHandler>());
-
 
         this.storage = new HashMap<>();
 
@@ -76,6 +84,14 @@ public class KVServer implements IKVServer {
                 this.accessFrequency = new HashMap<>();
             }
         }
+
+		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() { // close when hit CTRL+C
+            @Override
+            public void run() {
+				LOGGER.info("CLOSING THE SERVER");
+                close();
+            }
+        }));
 	}
 
 	
@@ -156,6 +172,7 @@ public class KVServer implements IKVServer {
 		// LOGGER.info("Attempting to put key: " + key + ", value: " + value);
 		try{
 			if (value == null){ //DELETE OPERATION 
+				LOGGER.info("Empty value, doing DELETE OPERATION in putKV");
 				storage.remove(key); 
 				if (cache != null){
 					cache.remove(key); 
@@ -170,6 +187,7 @@ public class KVServer implements IKVServer {
 				updateCache(key, value);  
 				LOGGER.info("Cache updated for key: " + key);
 			}
+			saveDataToStorage(); 
 		} catch (Exception e){
 			LOGGER.severe("Error while putting key: " + key+ " with value: "+ value); 
 			LOGGER.log(Level.SEVERE, e.getMessage(), e);
@@ -295,12 +313,17 @@ public class KVServer implements IKVServer {
 		running = initializeServer();
 		if (serverSocket != null) {
 			LOGGER.info("KV Server listening on port " + getPort());
+
+			loadDataFromStorage(); // Load data from the file into the storage map if the file exists
+
 			while (isRunning()) {
 				try {
 					Socket clientSocket = serverSocket.accept();
 					LOGGER.info("Connected to client: " + clientSocket.getInetAddress());
 					ClientHandler handler = new ClientHandler(clientSocket, this);
-					new Thread(handler).start();
+					Thread handlerThread = new Thread(handler);
+					clientHandlerThreads.add(handlerThread); 
+					handlerThread.start();
 				} catch (IOException e) {
 					if (!running) {
 						LOGGER.info("Server is stopping.");
@@ -309,10 +332,47 @@ public class KVServer implements IKVServer {
 					}
 				}
 			}
+			saveDataToStorage();
 		} else {
 			LOGGER.severe("Server socket is null.");
 		}
 	}
+
+	private void loadDataFromStorage() {
+		String filePath = "kvstorage.txt"; // Relative path to the file
+		File file = new File(filePath);
+	
+		try {
+			if (!file.exists()) {
+				// If the file doesn't exist, create an empty file
+				boolean created = file.createNewFile();
+				if (created) {
+					LOGGER.info("Created new " + filePath + " file");
+				} else {
+					LOGGER.warning("Failed to create " + filePath + " file");
+				}
+			}
+	
+			// Now you can open the file for reading
+			try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+				String line;
+				while ((line = reader.readLine()) != null) {
+					String[] parts = line.split(",");
+					if (parts.length == 2) {
+						storage.put(parts[0], parts[1]);
+					}
+				}
+				LOGGER.info("Loaded data from " + filePath + " file");
+			} catch (IOException e) {
+				LOGGER.log(Level.SEVERE, "Error loading data from " + filePath + " file", e);
+			}
+		} catch (IOException e) {
+			LOGGER.log(Level.SEVERE, "Error creating " + filePath + " file", e);
+		}
+	}
+	
+	
+	
 
 
 	public void stopServer() {
@@ -343,36 +403,44 @@ public class KVServer implements IKVServer {
 
 
 	private void saveDataToStorage() {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter("kvstorage.txt"))) {
-            for (Entry<String, String> entry : storage.entrySet()) {
-                writer.write(entry.getKey() + "," + entry.getValue());
-                writer.newLine();
-            }
-            LOGGER.info("Storage data saved to file");
-        } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Error saving data to storage", e);
-        }
-    }
+		try (BufferedWriter writer = new BufferedWriter(new FileWriter("kvstorage.txt"))) {
+			for (Entry<String, String> entry : storage.entrySet()) {
+				writer.write(entry.getKey() + "," + entry.getValue());
+				writer.newLine();
+			}
+			LOGGER.info("Storage data saved to file");
+		} catch (IOException e) {
+			LOGGER.log(Level.SEVERE, "Error saving data to storage file", e);
+		}
+	}
+	
 	
 	@Override
-    public void close(){
-		// TODO Auto-generated method stub
+	public void close() {
 		try {
-			running = false; 
+			running = false;
 
-			if (serverSocket != null && !serverSocket.isClosed()){
-				serverSocket.close(); 
+			// Close the server socket
+			if (serverSocket != null && !serverSocket.isClosed()) {
+				serverSocket.close();
 			}
-			// Optionally, wait for currently processing client handlers to complete
-        	// This might involve tracking active threads or using a thread pool
+
+			// Wait for client handler threads to complete
+			for (Thread thread : clientHandlerThreads) {
+				try {
+					thread.join(); // Wait for the thread to finish
+				} catch (InterruptedException e) {
+					// Handle the exception if needed
+					LOGGER.warning("Error waiting for client handler thread to complete: " + e.getMessage());
+				}
+			}
 
 			// Perform any necessary cleanup, like saving data to storage
-			saveDataToStorage(); // TO DO
-		}
-		catch (IOException e){
+			saveDataToStorage();
+		} catch (IOException e) {
+			LOGGER.warning("Error while closing the server: " + e.getMessage());
 			e.printStackTrace();
 		}
-		LOGGER.info("Server closed");
 	}
 
 	@Override
