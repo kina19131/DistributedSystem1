@@ -32,23 +32,40 @@ public class ClientHandler implements Runnable {
 
             String requestString;
             while ((requestString = input.readLine()) != null) {
-                SimpleKVMessage responseMessage;
+                SimpleKVMessage responseMessage = null;
                 
                 if (!requestString.isEmpty()){
                     SimpleKVMessage requestMessage = parseRequest(requestString); 
-                    
                     switch(requestMessage.getStatus()){
                         case PUT:
                             try {
-                                boolean isUpdate = server.inCache(requestMessage.getKey());
-                                server.putKV(requestMessage.getKey(), requestMessage.getValue());
-                                StatusType responseType = isUpdate ? StatusType.PUT_UPDATE : StatusType.PUT_SUCCESS;
+                                StatusType responseType; 
+                                boolean inStorage = server.inStorage(requestMessage.getKey()); 
+                                boolean inCache = server.inCache(requestMessage.getKey()); 
+
+                                if (requestMessage.getValue() == null){ // NO VALUE (DELETE)
+                                    LOGGER.info("\n ...DELETE IN PROGRESS... \n");
+                                    if (inStorage || inCache){ // STORED IN STORAGE 
+                                        server.putKV(requestMessage.getKey(), null);
+                                        responseType = StatusType.DELETE_SUCCESS;
+                                        LOGGER.info("Processed DELETE for key: " + requestMessage.getKey());
+                                    }
+                                    else{
+                                        responseType = StatusType.DELETE_ERROR; // Key not found for deletion
+                                        LOGGER.info("DELETE request failed for key: " + requestMessage.getKey() + ": key not found");
+                                    }
+                                }
+
+                                else{ // GOT VALUE (UPDATE / PUT)
+                                    server.putKV(requestMessage.getKey(), requestMessage.getValue());
+                                    boolean isUpdate = inStorage || inCache; // Updated condition
+                                    responseType = isUpdate ? StatusType.PUT_UPDATE : StatusType.PUT_SUCCESS;
+                                }
                                 responseMessage = new SimpleKVMessage(responseType, requestMessage.getKey(), null);
                             } catch (Exception e) {
                                 LOGGER.log(Level.SEVERE, "Error processing put request", e);
                                 responseMessage = new SimpleKVMessage(StatusType.PUT_ERROR, null, null);
                             }
-                            LOGGER.info("Processed PUT request for key: " + requestMessage.getKey());
                             break;
                         case GET: 
                             try {
@@ -60,29 +77,31 @@ public class ClientHandler implements Runnable {
                                 LOGGER.log(Level.SEVERE, "Error processing get request", e);
                                 responseMessage = new SimpleKVMessage(StatusType.GET_ERROR, null, null);
                             }
-                            break;
-                        default: 
-                            responseMessage = new SimpleKVMessage(StatusType.PUT_ERROR, null, null); 
-                    }
-                    String responseString = formatResponse(responseMessage);
-                    LOGGER.info("responseString: "+ responseString);
-                    output.println(responseString);
-                    output.flush();
-                    LOGGER.info("Response sent to client"); // Log the response sent
-                }
+                            break; 
+                        
+                        //case DELETE: 
+                            //
 
-                if (clientSocket.isClosed()) {
-                    LOGGER.info("... Client has closed the connection ...");
-                    break;
+                        default:
+                            LOGGER.info("Received neither PUT or GET.");
+                            break;
+                    }
+                    if(responseMessage != null){ // Only send a response if responseMessage was set
+                        String responseString = formatResponse(responseMessage);
+                        LOGGER.info("responseString: "+ responseString);
+                        output.println(responseString);
+                        output.flush();
+                    }
                 }
-                // LOGGER.info("... Waiting the Client...\n");
-                // break;
             }
+            LOGGER.info("Client has closed the connection. Close listening client socket.");
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, "Error in ClientHandler", e);
         } finally {
             try {
-                clientSocket.close();
+                if (!clientSocket.isClosed()) {
+                    clientSocket.close();
+                }
             } catch (IOException e) {
                 LOGGER.log(Level.SEVERE, "Error closing client socket", e);
             }
@@ -105,7 +124,7 @@ public class ClientHandler implements Runnable {
             return new SimpleKVMessage(StatusType.PUT_ERROR, null, null);
         }
         String key = parts.length > 1 ? parts[1] : null;
-        String value = parts.length > 2 ? parts[2] : "";
+        String value = parts.length > 2 ? parts[2] : null;
         LOGGER.info("Extracted key: " + key + ", value: " + value);
         return new SimpleKVMessage(status, key, value);
     }

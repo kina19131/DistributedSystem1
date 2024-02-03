@@ -153,12 +153,21 @@ public class KVServer implements IKVServer {
 	@Override
     public void putKV(String key, String value) throws Exception{
 		// TODO Auto-generated method stub
-		LOGGER.info("Attempting to put key: " + key + ", value: " + value);
+		// LOGGER.info("Attempting to put key: " + key + ", value: " + value);
 		try{
-			storage.put(key, value); 
+			if (value == null){ //DELETE OPERATION 
+				storage.remove(key); 
+				if (cache != null){
+					cache.remove(key); 
+				}
+				LOGGER.info("Key removed from storage and cache: "+key); 
+			}
+
+			storage.put(key, value); // if key already exists, get new val, will be updated 
+									// if key not available, will be put in. 
 			LOGGER.info("Storage updated for key: " + key);
 			if (cache != null) {
-				updateCache(key, value);  // Update cache, depending on your cache strategy
+				updateCache(key, value);  
 				LOGGER.info("Cache updated for key: " + key);
 			}
 		} catch (Exception e){
@@ -288,7 +297,6 @@ public class KVServer implements IKVServer {
 			LOGGER.info("KV Server listening on port " + getPort());
 			while (isRunning()) {
 				try {
-					// LOGGER.info("Waiting for client connections...");
 					Socket clientSocket = serverSocket.accept();
 					LOGGER.info("Connected to client: " + clientSocket.getInetAddress());
 					ClientHandler handler = new ClientHandler(clientSocket, this);
