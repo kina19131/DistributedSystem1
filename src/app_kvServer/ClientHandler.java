@@ -43,7 +43,7 @@ public class ClientHandler implements Runnable {
                                 boolean inStorage = server.inStorage(requestMessage.getKey()); 
                                 boolean inCache = server.inCache(requestMessage.getKey()); 
 
-                                if (requestMessage.getValue() == null){ // NO VALUE (DELETE)
+                                if (requestMessage.getValue() == null || requestMessage.getValue().isEmpty()){ // NO VALUE (DELETE)
                                     LOGGER.info("\n ...DELETE IN PROGRESS... \n");
                                     if (inStorage || inCache){ // STORED IN STORAGE 
                                         server.putKV(requestMessage.getKey(), null);
