@@ -8,34 +8,46 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.IOException;
-import java.util.logging.Logger;
-import java.util.logging.Level;
+
+import org.apache.log4j.Logger;
+import org.apache.log4j.Level;
+
+import java.io.InputStream;
+import java.io.OutputStream;
 
 import shared.messages.KVMessage;
-
+import shared.messages.SimpleKVCommunication;
 
 public class ClientHandler implements Runnable {
     private Socket clientSocket;
     private KVServer server; 
+    private boolean isOpen;
+    private InputStream input;
+    private OutputStream output;
 
-    private static final Logger LOGGER = Logger.getLogger(ClientHandler.class.getName());
+    private static final Logger LOGGER = Logger.getRootLogger();
+
 
     public ClientHandler(Socket socket, KVServer server) {
         this.clientSocket = socket;
         this.server = server; 
+        this.isOpen = true;
     }
 
     @Override
     public void run() {
-        try (BufferedReader input = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-            PrintWriter output = new PrintWriter(clientSocket.getOutputStream(), true)) {
+        try {
+            output = clientSocket.getOutputStream();
+			input = clientSocket.getInputStream();
 
-            String requestString;
-            while ((requestString = input.readLine()) != null) {
-                SimpleKVMessage responseMessage = null;
-                
-                if (!requestString.isEmpty()){
-                    SimpleKVMessage requestMessage = parseRequest(requestString); 
+            while (isOpen) {
+
+                try {
+                    SimpleKVMessage responseMessage = null;
+                    
+                    String msg = SimpleKVCommunication.receiveMessage(input, LOGGER);
+                    SimpleKVMessage requestMessage = SimpleKVCommunication.parseMessage(msg, LOGGER);
+                    
                     switch(requestMessage.getStatus()){
                         case PUT:
                             try {
@@ -63,7 +75,7 @@ public class ClientHandler implements Runnable {
                                 }
                                 responseMessage = new SimpleKVMessage(responseType, requestMessage.getKey(), null);
                             } catch (Exception e) {
-                                LOGGER.log(Level.SEVERE, "Error processing put request", e);
+                                LOGGER.log(Level.ERROR, "Error processing put request", e);
                                 responseMessage = new SimpleKVMessage(StatusType.PUT_ERROR, null, null);
                             }
                             break;
@@ -74,7 +86,7 @@ public class ClientHandler implements Runnable {
                                 responseMessage = new SimpleKVMessage(responseType, requestMessage.getKey(), response);
                                 LOGGER.info("Processed GET request for key: " + requestMessage.getKey() + " with value: " + response);
                             } catch (Exception e) {
-                                LOGGER.log(Level.SEVERE, "Error processing get request", e);
+                                LOGGER.log(Level.ERROR, "Error processing get request", e);
                                 responseMessage = new SimpleKVMessage(StatusType.GET_ERROR, null, null);
                             }
                             break; 
@@ -87,55 +99,26 @@ public class ClientHandler implements Runnable {
                             break;
                     }
                     if(responseMessage != null){ // Only send a response if responseMessage was set
-                        String responseString = formatResponse(responseMessage);
-                        LOGGER.info("responseString: "+ responseString);
-                        output.println(responseString);
-                        output.flush();
+                        SimpleKVCommunication.sendMessage(responseMessage, output, LOGGER);
+                        LOGGER.info("responseString: "+ responseMessage.getMsg());
                     }
-                }
+                } catch (IOException ioe) {
+				    LOGGER.log(Level.ERROR, "Error! Connection Lost!", ioe);
+				    isOpen = false;
+				}
             }
             LOGGER.info("Client has closed the connection. Close listening client socket.");
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Error in ClientHandler", e);
+            LOGGER.log(Level.ERROR, "Error in ClientHandler", e);
         } finally {
             try {
                 if (!clientSocket.isClosed()) {
                     clientSocket.close();
                 }
             } catch (IOException e) {
-                LOGGER.log(Level.SEVERE, "Error closing client socket", e);
+                LOGGER.log(Level.ERROR, "Error closing client socket", e);
             }
         }
-    }
-
-    private SimpleKVMessage parseRequest(String requestString) {
-        LOGGER.info("Received request string: " + requestString);
-        if (requestString == null || requestString.trim().isEmpty()) {
-            LOGGER.warning("Empty or null request string received");
-            return new SimpleKVMessage(StatusType.PUT_ERROR, null, null);
-        }
-        String[] parts = requestString.split(" ", 3);
-        StatusType status;
-        try {
-            status = StatusType.valueOf(parts[0]);
-            LOGGER.info("Parsed status: " + status);
-        } catch (IllegalArgumentException e) {
-            LOGGER.warning("Invalid Status:" + parts[0]);
-            return new SimpleKVMessage(StatusType.PUT_ERROR, null, null);
-        }
-        String key = parts.length > 1 ? parts[1] : null;
-        String value = parts.length > 2 ? parts[2] : null;
-        LOGGER.info("Extracted key: " + key + ", value: " + value);
-        return new SimpleKVMessage(status, key, value);
-    }
-       
-    private String formatResponse(SimpleKVMessage message) {
-        String status = message.getStatus().name();
-        // LOGGER.info("FORMAT RESPONSE: " + status);
-        // LOGGER.info("FORMAT RESPONSE Value: " + message.getValue());
-        String key = (message.getKey() != null) ? message.getKey() : "";
-        String value = (message.getValue() != null) ? message.getValue() : "";
-        return status + " " + key + " " + value + "\r\n";
     }
     
 }

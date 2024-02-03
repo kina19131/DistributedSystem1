@@ -16,7 +16,7 @@ import org.apache.log4j.Logger;
 import shared.messages.KVMessage;
 import shared.messages.KVMessage.StatusType;
 import shared.messages.SimpleKVMessage;
-
+import shared.messages.SimpleKVCommunication;
 
 public class KVCommunication implements Runnable {
     
@@ -84,11 +84,11 @@ public class KVCommunication implements Runnable {
             throw new IOException("Output stream not initialized");
         }
 
-        // Convert the message to a string format based on your protocol
-        String messageToSend = formatMessage(status, key, value);
+        // Create SimpleKVMessage format
+        SimpleKVMessage messageToSend = new SimpleKVMessage(status, key, value);
         
         // Send the message
-        sendFormattedMessage(messageToSend);
+        SimpleKVCommunication.sendMessage(messageToSend, output, logger);
 
         System.out.println("Sent message: " + messageToSend); // MODIFIED: Added logging for sent messages
         return receiveMessage(); 
@@ -108,36 +108,14 @@ public class KVCommunication implements Runnable {
         }
     
         // Read the response and parse it
-        String response = receiveFormattedMessage();
-        System.out.println("Received raw message: " + response); // MODIFIED: Added logging for raw received message
-        return parseMessage(response);
+        try {
+            String response = SimpleKVCommunication.receiveMessage(input, logger);
+            System.out.println("Received raw message: " + response); // MODIFIED: Added logging for raw received message
+            return SimpleKVCommunication.parseMessage(response, logger);
+        } catch (IOException e) {
+            throw new IOException("Response not readable.");
+        }
     }
-    
-    
-
-    // Helper method to format the message to be sent
-    private String formatMessage(StatusType status, String key, String value) {
-        return status.name() + " " + key + " " + (value != null ? value : "") + "\n";
-    }
-
-
-    // Helper method to send the formatted message
-    private void sendFormattedMessage(String message) throws IOException {
-        PrintWriter printWriter = new PrintWriter(output, true);
-        printWriter.println(message);
-        // System.out.println("Sent message: " + message); // MODIFIED: Log the message being sent
-    }
-
-    // Helper method to receive the formatted message
-    private String receiveFormattedMessage() throws IOException {
-        System.out.println("Waiting for server response...");
-        BufferedReader reader = new BufferedReader(new InputStreamReader(input));
-        String response = reader.readLine();
-        System.out.println("Raw response received: " + response); // Debugging the raw response
-        return response;
-    }
-
-
 
     public void closeConnection() {
         logger.info("try to close connection ...");
@@ -167,40 +145,6 @@ public class KVCommunication implements Runnable {
     
     public void setRunning(boolean run) {
         running = run;
-    }
-
-    // private KVMessage parseMessage(String response) {
-    //     try {
-    //         String[] parts = response.split(" ", 3);
-    //         StatusType statusType = StatusType.valueOf(parts[0]);
-    //         String key = parts[1];
-    //         String value = parts.length > 2 ? parts[2] : null;
-            
-    //         // System.out.println("Parsed message - Status: " + statusType + ", Key: " + key + ", Value: " + value); // MODIFIED: Log parsed message details
-    //         return new SimpleKVMessage(statusType, key, value);
-    //     } catch (Exception e) {
-    //         // System.out.println("Error parsing message: " + response); // MODIFIED: Log parsing errors
-    //         e.printStackTrace();
-    //         return null;
-    //     }
-    // }
-
-    private KVMessage parseMessage(String response) {
-        if (response == null || response.isEmpty()) {
-            logger.error("Received empty or null response");
-            return null;
-        }
-        try {
-            String[] parts = response.split(" ", 3);
-            StatusType statusType = StatusType.valueOf(parts[0]);
-            String key = parts.length > 1 ? parts[1] : "";
-            String value = parts.length > 2 ? parts[2] : "";
-            System.out.println("Parsed message - Status: " + statusType + ", Key: " + key + ", Value: " + value);
-            return new SimpleKVMessage(statusType, key, value);
-        } catch (Exception e) {
-            System.out.println("Error parsing message: " + response + ". Exception: " + e.getMessage()); // Instead of logger.error
-            return null;
-        }
     }
 
     public void connect() throws IOException {
