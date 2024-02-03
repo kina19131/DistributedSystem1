@@ -41,7 +41,9 @@ public class KVClient implements IKVClient {
     }
 
     private void handleCommand(String cmdLine) {
+		cmdLine = cmdLine.trim(); 
 		String[] tokens = cmdLine.split("\\s+");
+		System.out.println("Received command: " + tokens[0]);
 
 		if(tokens[0].equals("quit")) {	
 			stop = true;
@@ -54,6 +56,7 @@ public class KVClient implements IKVClient {
 					serverAddress = tokens[1];
 					serverPort = Integer.parseInt(tokens[2]);
 					newConnection(serverAddress, serverPort);
+					System.out.println("Connected to: " + serverAddress + " " + serverPort);
 				} catch(NumberFormatException nfe) {
 					printError("No valid address. Port must be a number!");
 					logger.info("Unable to parse argument <port>", nfe);
@@ -75,15 +78,19 @@ public class KVClient implements IKVClient {
         } else if(tokens[0].equals("put")) {
             if(tokens.length >= 2) {                
                 if(kvStore != null && kvStore.isRunning()) {
+					// System.out.println("Attempting to put - step 1!");
 					String key = tokens[1];                   
                     if (key.length() > 0 && key.length() <= MAX_KEY_BYTES ) {
+						// System.out.println("Attempting to put - step 2!");
                         String value = null;
                         if (tokens.length > 2) {
                             value = parseValue(cmdLine);  
                         }
                         if ((value == null) || (value != null && value.length() <= MAX_VAL_BYTES)) {
                             try {
+								// System.out.println("Attempting to put - step 3!");
                                 KVMessage res = kvStore.put(key, value);
+								System.out.println("Server response: " + res.getStatus());
                             } catch (Exception e) {
                                 printError("Unable to perform put request!");
 					            logger.error("Unable to perform put request!", e);
@@ -102,11 +109,17 @@ public class KVClient implements IKVClient {
 			}
 
 		} else if(tokens[0].equals("get")) {
+			System.out.println("YO WE PROCESSING GET - part1");
             if(tokens.length == 2) {
 				if(kvStore != null && kvStore.isRunning()){
 					String key = tokens[1];
+					System.out.println("Preparing to call kvStore.get with key: " + key);
                     try {
+						System.out.println("YO WE PROCESSING GET - part 2");
                         KVMessage res = kvStore.get(key);
+						System.out.println("get RES: " + res);
+						logger.info("Received response from server for GET request");
+						System.out.println("Server response: " + res.getStatus());
                     } catch (Exception e) {
                         printError("Unable to perform get request!");
 					    logger.error("Unable to perform get request!", e);

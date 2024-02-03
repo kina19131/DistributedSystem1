@@ -37,9 +37,13 @@ public class KVStore implements KVCommInterface {
 	}
 
 	@Override
-	public void connect()  throws UnknownHostException, Exception {
-		new KVCommunication(serverAddress, serverPort);
-		setRunning(true);		
+	public void connect() throws UnknownHostException, Exception {
+		if (serverAddress == null || serverPort <= 0) {
+            throw new IllegalStateException("Server address and port are not set.");
+        }
+        kvComm = new KVCommunication(serverAddress, serverPort);
+        kvComm.connect();
+        setRunning(true);
 	}
 
 	@Override
@@ -52,15 +56,30 @@ public class KVStore implements KVCommInterface {
 
 	@Override
 	public KVMessage put(String key, String value) throws Exception {
-		kvComm.sendMessage(StatusType.PUT, key, value);
-		return null;
+		return kvComm.sendMessage(StatusType.PUT, key, value);
 	}
+
+	// @Override
+	// public KVMessage get(String key) throws Exception {
+	// 	System.out.println("Sending GET request for key: " + key); // Log sending of GET request
+	// 	kvComm.sendMessage(StatusType.GET, key, null);
+	// 	KVMessage response = kvComm.receiveMessage(); // Receive the response
+	// 	System.out.println("Received GET response: " + response); // Log received response
+	// 	return response;
+	// }
 
 	@Override
 	public KVMessage get(String key) throws Exception {
-		kvComm.sendMessage(StatusType.GET, key, null);
-		return null;
+		logger.info("Sending GET request for key: " + key); // Log the sending of GET request
+		KVMessage requestResponse = kvComm.sendMessage(StatusType.GET, key, null); // Send the GET request and immediately wait for the response
+		if (requestResponse != null) {
+			logger.info("Received GET response: " + requestResponse.getStatus() + " for key: " + requestResponse.getKey() + " with value: " + requestResponse.getValue()); // Log the received response
+		} else {
+			logger.error("Received null response for GET request for key: " + key); // Log error if response is null
+		}
+		return requestResponse; // Return the response
 	}
+
 
 	public void setRunning(boolean run) {
 		running = run;
