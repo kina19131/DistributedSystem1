@@ -1,44 +1,15 @@
-// package app_kvServer;
-
-// import java.io.BufferedWriter;
-// import java.io.FileWriter;
-// import java.io.BufferedReader;
-// import java.io.FileReader;
-// import java.io.File;
-
-// import java.util.ArrayList;
-// import java.util.List;
-
-// import java.io.IOException;
-// import java.net.InetAddress;
-// import java.net.UnknownHostException;
-// import java.net.ServerSocket;
-// import java.net.Socket;
-// import java.util.Collections;
-// import java.util.HashMap;
-// import java.util.HashSet;
-// import java.util.LinkedList;
-// import java.util.Map;
-// import java.util.Queue;
-// import java.util.Set;
-// import java.util.logging.Level;
-// import java.util.logging.Logger;
-// import java.util.Map.Entry;
-// import java.net.BindException;
-
 package app_kvServer;
 
 import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-
 import app_kvServer.ClientHandler;
-
 
 public class KVServer implements IKVServer {
 	/**
@@ -52,15 +23,15 @@ public class KVServer implements IKVServer {
 	 *           and "LFU".
 	 */
 
-	 private ServerSocket serverSocket;
+	private ServerSocket serverSocket;
 	private int port;
 	private boolean running;
 	private Set<ClientHandler> activeClientHandlers;
 	private List<Thread> clientHandlerThreads;
-	private Map<String, String> storage;
-	private Map<String, String> cache;
+	private ConcurrentHashMap<String, String> storage;
+	private ConcurrentHashMap<String, String> cache;
 	private Queue<String> fifoQueue;
-	private Map<String, Integer> accessFrequency;
+	private ConcurrentHashMap<String, Integer> accessFrequency;
 	private LinkedHashMap<String, String> lruCache;
 	private PriorityBlockingQueue<String> lfuQueue;
 	private int cacheSize;
@@ -73,13 +44,13 @@ public class KVServer implements IKVServer {
 		this.strategy = IKVServer.CacheStrategy.valueOf(strategy.toUpperCase());
 
 		this.activeClientHandlers = Collections.synchronizedSet(new HashSet<ClientHandler>());
-		this.clientHandlerThreads = new ArrayList<Thread>();
-		this.storage = new HashMap<String, String>();
+		this.clientHandlerThreads = Collections.synchronizedList(new ArrayList<Thread>());
+		this.storage = new ConcurrentHashMap<String, String>();
 
 		if (IKVServer.CacheStrategy.FIFO.equals(this.strategy)) {
 			this.fifoQueue = new LinkedList<String>();
 		} else if (IKVServer.CacheStrategy.LFU.equals(this.strategy)) {
-			this.accessFrequency = new HashMap<String, Integer>();
+			this.accessFrequency = new ConcurrentHashMap<String, Integer>();
 			this.lfuQueue = new PriorityBlockingQueue<String>(cacheSize, new Comparator<String>() {
 				public int compare(String key1, String key2) {
 					int freqCompare = Integer.compare(accessFrequency.get(key1), accessFrequency.get(key2));
@@ -91,7 +62,7 @@ public class KVServer implements IKVServer {
 		}
 
 		if (cacheSize > 0) {
-			this.cache = new HashMap<String, String>();
+			this.cache = new ConcurrentHashMap<String, String>();
 		}
 	}
 
@@ -180,7 +151,7 @@ public class KVServer implements IKVServer {
 		// TODO Auto-generated method stub
 		// LOGGER.info("Attempting to put key: " + key + ", value: " + value);
 		try{
-			if ("null".equals(value)) {
+			if (value == null || "null".equals(value)) {
 				if (storage.containsKey(key)) {
 					storage.remove(key);
 					LOGGER.info("Key removed from storage: " + key);
@@ -241,16 +212,18 @@ public class KVServer implements IKVServer {
 	// LFU: The least frequently used item is evicted. You use an accessFrequency map to track the access frequency of each key.
 	// FIFO Update Cache Method
 	private void updateCacheFIFO(String key, String value) {
-		if (fifoQueue.size() >= cacheSize && !cache.containsKey(key)) {
-			String oldestKey = fifoQueue.poll();
-			cache.remove(oldestKey);
+		synchronized (fifoQueue) {
+			if (fifoQueue.size() >= cacheSize && !cache.containsKey(key)) {
+				String oldestKey = fifoQueue.poll();
+				cache.remove(oldestKey);
+			}
+			if (!cache.containsKey(key)) {
+				fifoQueue.offer(key);
+			} else {
+				// Handle the key already existing in the cache, if necessary
+			}
+			cache.put(key, value);
 		}
-		if (!cache.containsKey(key)) {
-			fifoQueue.offer(key);
-		} else {
-			// Handle the key already existing in the cache, if necessary
-		}
-		cache.put(key, value);
 	}
 
 	// LRU Update Cache Method
