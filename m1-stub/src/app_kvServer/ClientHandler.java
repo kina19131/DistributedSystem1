@@ -8,6 +8,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.IOException;
+import java.net.SocketException;
 
 import org.apache.log4j.Logger;
 import org.apache.log4j.Level;
@@ -55,7 +56,7 @@ public class ClientHandler implements Runnable {
                                 boolean inStorage = server.inStorage(requestMessage.getKey()); 
                                 boolean inCache = server.inCache(requestMessage.getKey()); 
 
-                                if (requestMessage.getValue() == null || requestMessage.getValue().isEmpty()){ // NO VALUE (DELETE)
+                                if (requestMessage.getValue() == "null" || requestMessage.getValue().isEmpty()){ // NO VALUE (DELETE)
                                     LOGGER.info("\n ...DELETE IN PROGRESS... \n");
                                     if (inStorage || inCache){ // STORED IN STORAGE 
                                         server.putKV(requestMessage.getKey(), null);
@@ -90,9 +91,6 @@ public class ClientHandler implements Runnable {
                                 responseMessage = new SimpleKVMessage(StatusType.GET_ERROR, null, null);
                             }
                             break; 
-                        
-                        //case DELETE: 
-                            //
 
                         default:
                             LOGGER.info("Received neither PUT or GET.");
@@ -102,6 +100,10 @@ public class ClientHandler implements Runnable {
                         SimpleKVCommunication.sendMessage(responseMessage, output, LOGGER);
                         LOGGER.info("responseString: "+ responseMessage.getMsg());
                     }
+                } catch (SocketException se) {
+                                // Handle the socket exception (e.g., client disconnected)
+                                LOGGER.info("Client disconnected."); // ## MODIFIED
+                                isOpen = false;
                 } catch (IOException ioe) {
 				    LOGGER.log(Level.ERROR, "Error! Connection Lost!", ioe);
 				    isOpen = false;

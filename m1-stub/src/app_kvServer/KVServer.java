@@ -1,30 +1,40 @@
+// package app_kvServer;
+
+// import java.io.BufferedWriter;
+// import java.io.FileWriter;
+// import java.io.BufferedReader;
+// import java.io.FileReader;
+// import java.io.File;
+
+// import java.util.ArrayList;
+// import java.util.List;
+
+// import java.io.IOException;
+// import java.net.InetAddress;
+// import java.net.UnknownHostException;
+// import java.net.ServerSocket;
+// import java.net.Socket;
+// import java.util.Collections;
+// import java.util.HashMap;
+// import java.util.HashSet;
+// import java.util.LinkedList;
+// import java.util.Map;
+// import java.util.Queue;
+// import java.util.Set;
+// import java.util.logging.Level;
+// import java.util.logging.Logger;
+// import java.util.Map.Entry;
+// import java.net.BindException;
+
 package app_kvServer;
 
-import java.io.BufferedWriter;
-import java.io.FileWriter;
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.File;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
+import java.io.*;
+import java.net.*;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.Map.Entry;
-import java.net.BindException;
 
 
 import app_kvServer.ClientHandler;
@@ -42,56 +52,55 @@ public class KVServer implements IKVServer {
 	 *           and "LFU".
 	 */
 
-	private ServerSocket serverSocket;
-	private int port; 
-
-	private boolean running; 
-
+	 private ServerSocket serverSocket;
+	private int port;
+	private boolean running;
 	private Set<ClientHandler> activeClientHandlers;
-	// private Set<ClientHandler> activeClientHandlers;
-	// private Set<ClientHandler> activeClientHandlers = Collections.synchronizedSet(new HashSet<>());
-
-
 	private List<Thread> clientHandlerThreads;
-	
 	private Map<String, String> storage;
-    private Map<String, String> cache;
-    private Queue<String> fifoQueue; // For FIFO caching
-	private Map<String, Integer> accessFrequency; // For LFU caching 
-
-    private int cacheSize;
-	private IKVServer.CacheStrategy strategy; // Correct type for strategy
-
-	private static final Logger LOGGER = Logger.getLogger(ClientHandler.class.getName());
-
+	private Map<String, String> cache;
+	private Queue<String> fifoQueue;
+	private Map<String, Integer> accessFrequency;
+	private LinkedHashMap<String, String> lruCache;
+	private PriorityBlockingQueue<String> lfuQueue;
+	private int cacheSize;
+	private IKVServer.CacheStrategy strategy;
+	private static final Logger LOGGER = Logger.getLogger(KVServer.class.getName());
 
 	public KVServer(int port, int cacheSize, String strategy) {
-        this.port = port;
-		this.running = true; 
-        this.cacheSize = cacheSize;
-        this.strategy = IKVServer.CacheStrategy.valueOf(strategy);
+		this.port = port;
+		this.cacheSize = cacheSize;
+		this.strategy = IKVServer.CacheStrategy.valueOf(strategy.toUpperCase());
 
-		this.clientHandlerThreads = new ArrayList<>();
 		this.activeClientHandlers = Collections.synchronizedSet(new HashSet<ClientHandler>());
+		this.clientHandlerThreads = new ArrayList<Thread>();
+		this.storage = new HashMap<String, String>();
 
-        this.storage = new HashMap<>();
+		if (IKVServer.CacheStrategy.FIFO.equals(this.strategy)) {
+			this.fifoQueue = new LinkedList<String>();
+		} else if (IKVServer.CacheStrategy.LFU.equals(this.strategy)) {
+			this.accessFrequency = new HashMap<String, Integer>();
+			this.lfuQueue = new PriorityBlockingQueue<String>(cacheSize, new Comparator<String>() {
+				public int compare(String key1, String key2) {
+					int freqCompare = Integer.compare(accessFrequency.get(key1), accessFrequency.get(key2));
+					return freqCompare != 0 ? freqCompare : key1.compareTo(key2);
+				}
+			});
+		} else if (IKVServer.CacheStrategy.LRU.equals(this.strategy)) {
+			initLRUCache();
+		}
 
-        if (cacheSize > 0) { // Initialize cache for all strategies if cacheSize > 0
-            this.cache = new HashMap<>();
-            if ("FIFO".equals(strategy)) {
-                this.fifoQueue = new LinkedList<>();
-            } else if ("LFU".equals(strategy)) {
-                this.accessFrequency = new HashMap<>();
-            }
-        }
+		if (cacheSize > 0) {
+			this.cache = new HashMap<String, String>();
+		}
+	}
 
-		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() { // close when hit CTRL+C
-            @Override
-            public void run() {
-				LOGGER.info("CLOSING THE SERVER");
-                close();
-            }
-        }));
+	private void initLRUCache() {
+		this.lruCache = new LinkedHashMap<String, String>(cacheSize, 0.75F, true) {
+			protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+				return size() > KVServer.this.cacheSize;
+			}
+		};
 	}
 
 	
@@ -171,13 +180,20 @@ public class KVServer implements IKVServer {
 		// TODO Auto-generated method stub
 		// LOGGER.info("Attempting to put key: " + key + ", value: " + value);
 		try{
-			if (value == null){ //DELETE OPERATION 
-				LOGGER.info("Empty value, doing DELETE OPERATION in putKV");
-				storage.remove(key); 
-				if (cache != null){
-					cache.remove(key); 
+			if ("null".equals(value)) {
+				if (storage.containsKey(key)) {
+					storage.remove(key);
+					LOGGER.info("Key removed from storage: " + key);
 				}
-				LOGGER.info("Key removed from storage and cache: "+key); 
+				if (cache != null && cache.containsKey(key)) {
+					cache.remove(key);
+					if (strategy == CacheStrategy.LFU && accessFrequency.containsKey(key)) {
+						accessFrequency.remove(key);
+						lfuQueue.remove(key);
+					}
+					LOGGER.info("Key removed from cache: " + key);
+				}
+				return; 
 			}
 
 			storage.put(key, value); // if key already exists, get new val, will be updated 
@@ -205,7 +221,9 @@ public class KVServer implements IKVServer {
 				updateCacheFIFO(key, value);
 				break;
 			case LRU:
-				updateCacheLRU(key, value);
+				if (lruCache != null) {
+					updateCacheLRU(key, value);
+				}
 				LOGGER.info("LRU: Put Key: " + key + " with value:" + value); 	
 				break;
 			case LFU:
@@ -221,54 +239,42 @@ public class KVServer implements IKVServer {
 	// FIFO: The oldest item is evicted when the cache is full.
 	// LRU: The least recently used item is evicted. Your implementation keeps the most recently used items at the end of the cache map.
 	// LFU: The least frequently used item is evicted. You use an accessFrequency map to track the access frequency of each key.
-	private void updateCacheFIFO(String key, String value){
-        if (cache == null) {
-			LOGGER.info("FIFO Cache is NULL"); 	
-			return;
-		}
-	
-		if (!cache.containsKey(key) && fifoQueue.size() >= cacheSize) {
+	// FIFO Update Cache Method
+	private void updateCacheFIFO(String key, String value) {
+		if (fifoQueue.size() >= cacheSize && !cache.containsKey(key)) {
 			String oldestKey = fifoQueue.poll();
 			cache.remove(oldestKey);
 		}
-		cache.put(key, value);
-		fifoQueue.add(key);
-		LOGGER.info("FIFO || Put Key: " + key + " with value:" + value); 
-		// Confirmation // 	
-		if (cache.containsKey(key)) {
-			LOGGER.info("FIFO Cache update confirmed for key: " + key + " with value: " + value);
+		if (!cache.containsKey(key)) {
+			fifoQueue.offer(key);
 		} else {
-			LOGGER.warning("FIFO Cache update failed for key: " + key);
+			// Handle the key already existing in the cache, if necessary
 		}
+		cache.put(key, value);
 	}
 
-    private void updateCacheLRU(String key, String value) {
-        // Remove key to re-insert and maintain order
-        if (cache.containsKey(key)) {
-            cache.remove(key);
-        } 
-		else if (cache.size() >= cacheSize) {
-            String oldestKey = cache.keySet().iterator().next();
-            cache.remove(oldestKey);
-        }
-        cache.put(key, value);
-    }
+	// LRU Update Cache Method
+	private void updateCacheLRU(String key, String value) {
+		// Directly interact with lruCache, which is a LinkedHashMap
+		lruCache.put(key, value);
+	}
 
+	// LFU Update Cache Method
 	private void updateCacheLFU(String key, String value) {
-		if (cache.containsKey(key)) {
-			cache.put(key, value);
-			accessFrequency.put(key, accessFrequency.get(key) + 1);
-		} 
-		else {
-			if (cache.size() >= cacheSize) {
-                String leastFrequentKey = findLeastFrequentKeyLFU(); // Use a separate method for Java 7 compatibility
-                cache.remove(leastFrequentKey);
-                accessFrequency.remove(leastFrequentKey);
-            }
-            cache.put(key, value);
-            accessFrequency.put(key, 1);
+		if (cache.size() >= cacheSize && !cache.containsKey(key)) {
+			String leastUsedKey = lfuQueue.poll();
+			if (leastUsedKey != null) {
+				cache.remove(leastUsedKey);
+				accessFrequency.remove(leastUsedKey);
+			}
+		}
+		cache.put(key, value);
+		accessFrequency.put(key, accessFrequency.getOrDefault(key, 0) + 1);
+		if (!lfuQueue.contains(key)) {
+			lfuQueue.offer(key);
 		}
 	}
+
 	
 	private String findLeastFrequentKeyLFU() {
         String leastFrequentKey = null;
@@ -311,6 +317,10 @@ public class KVServer implements IKVServer {
 	@Override
 	public void run() {
 		running = initializeServer();
+		if (!initializeServer()) {
+            LOGGER.severe("Server initialization failed. Server is not running.");
+            return; // Stop the server from running if initialization fails
+        }
 		if (serverSocket != null) {
 			LOGGER.info("KV Server listening on port " + getPort());
 
@@ -387,18 +397,17 @@ public class KVServer implements IKVServer {
 	}
 
 	private boolean initializeServer() {
-		if (serverSocket == null) {
-			try {
-				serverSocket = new ServerSocket(port);
-				return true;
-			} catch (IOException e) {
-				LOGGER.log(Level.SEVERE, "Error! Cannot open server socket:", e);
-				return false;
-			}
-		}
-		return true;
-	}
-
+        if (serverSocket == null) {
+            try {
+                serverSocket = new ServerSocket(port);
+                return true;
+            } catch (IOException e) {
+                LOGGER.log(Level.SEVERE, "Error! Cannot open server socket:", e);
+                return false; // Return false if server socket cannot be opened
+            }
+        }
+        return true;
+    }
 
 
 
