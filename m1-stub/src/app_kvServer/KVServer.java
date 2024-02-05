@@ -241,7 +241,6 @@ public class KVServer implements IKVServer {
 			if (!cache.containsKey(key)) {
 				fifoQueue.offer(key);
 			} else {
-				// Handle the key already existing in the cache, if necessary
 			}
 			cache.put(key, value);
 		}
@@ -249,7 +248,6 @@ public class KVServer implements IKVServer {
 
 	// LRU Update Cache Method
 	private void updateCacheLRU(String key, String value) {
-		// Directly interact with lruCache, which is a LinkedHashMap
 		lruCache.put(key, value);
 	}
 
@@ -311,14 +309,14 @@ public class KVServer implements IKVServer {
 	@Override
 	public void run() {
 		running = initializeServer();
-		if (!initializeServer()) {
+		if (!initializeServer()) { // Initialization fails, stop the server from running 
             LOGGER.severe("Server initialization failed. Server is not running.");
-            return; // Stop the server from running if initialization fails
+            return; 
         }
 		if (serverSocket != null) {
 			LOGGER.info("KV Server listening on port " + getPort());
 
-			loadDataFromStorage(); // Load data from the file into the storage map if the file exists
+			loadDataFromStorage(); // Load data from the file into the storage 
 
 			while (isRunning()) {
 				try {
@@ -343,7 +341,7 @@ public class KVServer implements IKVServer {
 	}
 
 	private void loadDataFromStorage() {
-		String filePath = storagePath + File.separator + "kvstorage.txt"; // Relative path to the file
+		String filePath = storagePath + File.separator + "kvstorage.txt"; 
 		File file = new File(filePath);
 	
 		try {
@@ -357,7 +355,6 @@ public class KVServer implements IKVServer {
 				}
 			}
 	
-			// Now you can open the file for reading
 			try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
 				String line;
 				while ((line = reader.readLine()) != null) {
@@ -394,7 +391,7 @@ public class KVServer implements IKVServer {
                 return true;
             } catch (IOException e) {
                 LOGGER.log(Level.SEVERE, "Error! Cannot open server socket:", e);
-                return false; // Return false if server socket cannot be opened
+                return false; // server socket cannot be opened
             }
         }
         return true;
@@ -431,12 +428,10 @@ public class KVServer implements IKVServer {
 				try {
 					thread.join(); // Wait for the thread to finish
 				} catch (InterruptedException e) {
-					// Handle the exception if needed
 					LOGGER.warning("Error waiting for client handler thread to complete: " + e.getMessage());
 				}
 			}
 
-			// Perform any necessary cleanup, like saving data to storage
 			saveDataToStorage();
 		} catch (IOException e) {
 			LOGGER.warning("Error while closing the server: " + e.getMessage());
@@ -446,8 +441,6 @@ public class KVServer implements IKVServer {
 
 	@Override
     public void kill(){
-		// TODO Auto-generated method stub
-		// STOP THE SERVER? 
 		running = false; 
 		try{
 			if(serverSocket != null && !serverSocket.isClosed()){
@@ -457,35 +450,11 @@ public class KVServer implements IKVServer {
         // This might involve interrupting active threads or shutting down a thread pool
 
 		} catch (IOException e) {
-			// Handle exceptions, e.g., log them
 			e.printStackTrace();
 		}
 		LOGGER.info("Server Socket Closed");
 	}
 
-	
-	// public static void main(String[] args) {
-	// 	// Default values
-	// 	int port = 50000;
-	// 	int cacheSize = 10; 
-	// 	String ipAddress = "127.0.0.1";
-	// 	String strategy = "FIFO";
-		
-	// 	// Parse command line arguments
-	// 	for (int i = 0; i < args.length; i++) {
-	// 		if ("-p".equals(args[i]) && i + 1 < args.length) {
-	// 			port = Integer.parseInt(args[i + 1]);
-	// 		}
-	// 		if ("-a".equals(args[i]) && i + 1 < args.length) {
-	// 			ipAddress = args[i + 1];
-	// 		}
-			
-	// 	}
-	
-	// 	// Initialize and start the server
-	// 	KVServer server = new KVServer(port, cacheSize, strategy);
-    // 	server.run();
-	// }
 
 
 	public static void main(String[] args) {
@@ -540,7 +509,6 @@ public class KVServer implements IKVServer {
 			System.err.println("Error setting storage directory: " + e.getMessage());
 			System.exit(1);
 		}
-		// server.run();
 	}
 
 	
