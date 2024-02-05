@@ -7,6 +7,7 @@ import client.KVStore;
 import shared.messages.KVMessage;
 import shared.messages.KVMessage.StatusType;
 
+import java.io.File;
 import java.net.UnknownHostException;
 
 
@@ -25,6 +26,14 @@ public class AdditionalTest extends TestCase {
 
     public void tearDown() {
         kvClient.disconnect();
+
+        // Clean up storage file
+        File file = new File("./kvstorage.txt");
+        if (file.delete()) { 
+            System.out.println("Deleted the file: " + file.getName());
+        } else {
+            System.out.println("Failed to delete the file.");
+        }
     }
 	
 	@Test

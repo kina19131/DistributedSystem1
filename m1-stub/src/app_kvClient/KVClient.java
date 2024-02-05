@@ -110,13 +110,11 @@ public class KVClient implements IKVClient {
 			}
 
 		} else if(tokens[0].equals("get")) {
-			System.out.println("YO WE PROCESSING GET - part1");
             if(tokens.length == 2) {
 				if(kvStore != null && kvStore.isRunning()){
 					String key = tokens[1];
 					System.out.println("Preparing to call kvStore.get with key: " + key);
                     try {
-						System.out.println("YO WE PROCESSING GET - part 2");
                         KVMessage res = kvStore.get(key);
 						System.out.println("get RES: " + res);
 						logger.info("Received response from server for GET request");

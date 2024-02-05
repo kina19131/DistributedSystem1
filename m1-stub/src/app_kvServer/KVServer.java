@@ -25,7 +25,7 @@ public class KVServer implements IKVServer {
 	 *           and "LFU".
 	 */
 
-	private String storagePath;
+	private String storagePath = ".";
 
 	private ServerSocket serverSocket;
 	private int port;
@@ -68,7 +68,17 @@ public class KVServer implements IKVServer {
 		if (cacheSize > 0) {
 			this.cache = new ConcurrentHashMap<String, String>();
 		}
+		start();
 	}
+
+	public void start() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                KVServer.this.run();
+            }
+        }).start();
+    }
 
 	private void initLRUCache() {
 		this.lruCache = new LinkedHashMap<String, String>(cacheSize, 0.75F, true) {
@@ -365,9 +375,6 @@ public class KVServer implements IKVServer {
 		}
 	}
 	
-	
-	
-
 
 	public void stopServer() {
 		running = false;
@@ -392,7 +399,6 @@ public class KVServer implements IKVServer {
         }
         return true;
     }
-
 
 
 	private void saveDataToStorage() {
@@ -534,7 +540,7 @@ public class KVServer implements IKVServer {
 			System.err.println("Error setting storage directory: " + e.getMessage());
 			System.exit(1);
 		}
-		server.run();
+		// server.run();
 	}
 
 	

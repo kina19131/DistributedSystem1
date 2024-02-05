@@ -18,20 +18,11 @@ public class ConcurrencyTest extends TestCase {
 	@Before
     public void setUp() throws Exception {
         kvServer = new KVServer(50005, 10, "FIFO");
-        
-        // Start the KVServer in a new thread
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                kvServer.run();
-            }
-        }).start();
-        Thread.sleep(100); // Buffer in some time to start up
     }
 
     @After
     public void tearDown() throws Exception {
-        kvServer.kill();
+        kvServer.close();
     }
 
     @Test
