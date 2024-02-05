@@ -10,12 +10,11 @@ import shared.messages.KVMessage.StatusType;
 import java.io.File;
 import java.net.UnknownHostException;
 
-
-
 public class AdditionalTest extends TestCase {
 	
 	private KVStore kvClient;
 
+    @Override
     public void setUp() {
         kvClient = new KVStore("localhost", 50000);
         try {
@@ -24,10 +23,10 @@ public class AdditionalTest extends TestCase {
         }
     }
 
+    @Override
     public void tearDown() {
         kvClient.disconnect();
 
-        // Clean up storage file
         File file = new File("./kvstorage.txt");
         if (file.delete()) { 
             System.out.println("Deleted the file: " + file.getName());
@@ -36,6 +35,7 @@ public class AdditionalTest extends TestCase {
         }
     }
 	
+    // Test Case 1: Put a Long Key
 	@Test
 	public void testPutLongKey() {
 		String key = "VeryLongKey";  
@@ -52,8 +52,7 @@ public class AdditionalTest extends TestCase {
 		assertTrue(ex == null && response.getStatus() == StatusType.PUT_SUCCESS);
 	}
 
-
-    // Additional Test Case 2: Put a key-value pair with a special character in the key
+    // Test Case 2: Put Special Character in Key
     @Test
     public void testPutSpecialCharacterKey() {
         String key = "!@#$%^&*()";
@@ -70,7 +69,7 @@ public class AdditionalTest extends TestCase {
         assertTrue(ex == null && response.getStatus() == StatusType.PUT_SUCCESS);
     }
 
-    // Additional Test Case 3: Put large value
+    // Test Case 3: Put Large Value
     @Test
 	public void testPutLargeValue() {
 		String key = "thisKey";
@@ -87,24 +86,7 @@ public class AdditionalTest extends TestCase {
 		assertTrue(ex == null && response.getStatus() == StatusType.PUT_SUCCESS);
 	}
 
-
-    // // Additional Test Case 4: Attempt to get a key that was never inserted
-    // @Test
-    // public void testGetNonExistentKey() {
-    //     String key = "nonExistentKey";
-    //     KVMessage response = null;
-    //     Exception ex = null;
-
-    //     try {
-    //         response = kvClient.get(key);
-    //     } catch (Exception e) {
-    //         ex = e;
-    //     }
-
-    //     assertTrue(ex == null && response.getStatus() == StatusType.GET_ERROR);
-    // }
-
-    // Additional Test Case 5: Attempt to put a value with space 
+    // Test Case 4: Value With Spaces
     @Test
 	public void testValueWithSpaces() {
 		String key = "this_key";
@@ -121,8 +103,7 @@ public class AdditionalTest extends TestCase {
 		assertTrue(ex == null && response.getStatus() == StatusType.PUT_SUCCESS);
 	}
 
-
-    // Additional Test Case 6: Attempt to put an empty value which should delete the value of the key
+    // Test Case 5: Put Empty Value (Delete Key)
     @Test
     public void testPutEmptyValue() {
         String key = "this_key";
@@ -139,8 +120,7 @@ public class AdditionalTest extends TestCase {
         assertTrue(ex == null && response.getStatus() == StatusType.DELETE_SUCCESS);
     }
 
-
-    // Additional Test Case 7: Put a key-value pair and then delete using NULL value
+    // Test Case 6: Put and Delete with Null Value
     @Test
     public void testPutAndDeleteNull() {
         String key = "test8";
@@ -163,13 +143,11 @@ public class AdditionalTest extends TestCase {
                 && getResponse.getStatus() == StatusType.GET_ERROR);
     }
 
-    
+    // Test Case 7: Get After Disconnect
     @Test
     public void testGetAfterDisconnect() {
-        // Step 1: Disconnect the client from the server
         kvClient.disconnect();
 
-        // Step 2: Reconnect to the server
         Exception reconnectionEx = null;
         try {
             kvClient.connect();
@@ -177,10 +155,8 @@ public class AdditionalTest extends TestCase {
             reconnectionEx = e;
         }
 
-        // Ensure reconnection was successful before proceeding
         assertTrue("Reconnection failed?", reconnectionEx == null);
 
-        // Step 3: Attempt to get the key
         String key = "VeryLongKey";
         KVMessage response = null;
         Exception ex = null;
@@ -189,29 +165,10 @@ public class AdditionalTest extends TestCase {
         } catch (Exception e) {
             ex = e;
         }
-
-        // Step 4: Assert the expected outcome of the get operation
-        // Assuming you expect the key to exist and return a successful response
         assertTrue("Get operation failed after reconnection", ex == null && response.getStatus() == StatusType.GET_SUCCESS);
     }
 
-
-    // @Test
-    // public void testPutWithNullKey() {
-    //     String key = null;
-    //     String value = "testValue";
-    //     KVMessage response = null;
-    //     Exception ex = null;
-
-    //     try {
-    //         response = kvClient.put(key, value);
-    //     } catch (Exception e) {
-    //         ex = e;
-    //     }
-
-    //     assertTrue(ex != null && response.getStatus() == StatusType.PUT_ERROR);
-    // }
-
+    // Test Case 8: Put Same Value Multiple Times
     @Test
     public void testPutSameValueMultipleTimes() {
         String key = "repeatedValueKey";
@@ -233,71 +190,4 @@ public class AdditionalTest extends TestCase {
                 && putResponse2.getStatus() == StatusType.PUT_UPDATE
                 && putResponse3.getStatus() == StatusType.PUT_UPDATE);
     }
-
-    // @Test
-    // public void testDeleteNonExistentKeyAfterDisconnect() {
-    //     kvClient.disconnect();
-    //     String key = "nonExistentKeyAfterDisconnect";
-    //     KVMessage response = null;
-    //     Exception ex = null;
-
-    //     try {
-    //         response = kvClient.put(key, "null");
-    //     } catch (Exception e) {
-    //         ex = e;
-    //     }
-
-    //     assertTrue(ex != null && ex instanceof IllegalStateException);
-    // }
-
-    // @Test
-    // public void testPutAndGetEmptyKey() {
-    //     String key = "";
-    //     String value = "valueForEmptyKey";
-    //     KVMessage response = null;
-    //     Exception ex = null;
-
-    //     try {
-    //         response = kvClient.put(key, value);
-    //     } catch (Exception e) {
-    //         ex = e;
-    //     }
-
-    //     assertTrue(ex != null && ex instanceof IllegalArgumentException);
-    // }
-
-    // @Test
-    // public void testPutWithLargeKey() {
-    //     String key = "A".repeat(2000); // A key larger than the limit
-    //     String value = "largeKeyTestValue";
-    //     KVMessage response = null;
-    //     Exception ex = null;
-
-    //     try {
-    //         response = kvClient.put(key, value);
-    //     } catch (Exception e) {
-    //         ex = e;
-    //     }
-
-    //     assertTrue(ex != null && ex instanceof IllegalArgumentException);
-    // }
-
-    // @Test
-    // public void testDeleteKeyWithNullValue() {
-    //     String key = "nullValueKey";
-    //     KVMessage putResponse = null;
-    //     KVMessage deleteResponse = null;
-    //     Exception ex = null;
-
-    //     try {
-    //         putResponse = kvClient.put(key, "null");
-    //         deleteResponse = kvClient.put(key, "null");
-    //     } catch (Exception e) {
-    //         ex = e;
-    //     }
-
-    //     assertTrue(ex == null && putResponse.getStatus() == StatusType.PUT_SUCCESS
-    //             && deleteResponse.getStatus() == StatusType.DELETE_SUCCESS);
-    // }
-   
 }
