@@ -56,7 +56,9 @@ public class ClientHandler implements Runnable {
                                 boolean inStorage = server.inStorage(requestMessage.getKey()); 
                                 boolean inCache = server.inCache(requestMessage.getKey()); 
 
-                                if (requestMessage.getValue() == "null" || requestMessage.getValue().isEmpty()){ // NO VALUE (DELETE)
+                                //if (requestMessage.getValue() == "null" || requestMessage.getValue().isEmpty()){ // NO VALUE (DELETE)
+                                if ("null".equals(requestMessage.getValue()) || requestMessage.getValue().isEmpty()){
+
                                     LOGGER.info("\n ...DELETE IN PROGRESS... \n");
                                     if (inStorage || inCache){ // STORED IN STORAGE 
                                         server.putKV(requestMessage.getKey(), null);
@@ -74,7 +76,7 @@ public class ClientHandler implements Runnable {
                                     boolean isUpdate = inStorage || inCache; // Updated condition
                                     responseType = isUpdate ? StatusType.PUT_UPDATE : StatusType.PUT_SUCCESS;
                                 }
-                                responseMessage = new SimpleKVMessage(responseType, requestMessage.getKey(), null);
+                                responseMessage = new SimpleKVMessage(responseType, requestMessage.getKey(), requestMessage.getValue());
                             } catch (Exception e) {
                                 LOGGER.log(Level.ERROR, "Error processing put request", e);
                                 responseMessage = new SimpleKVMessage(StatusType.PUT_ERROR, null, null);

@@ -79,7 +79,8 @@ public class KVClient implements IKVClient {
             if(tokens.length >= 2) {                
                 if(kvStore != null && kvStore.isRunning()) {
 					// System.out.println("Attempting to put - step 1!");
-					String key = tokens[1];                   
+					String key = tokens[1]; 
+ 
                     if (key.length() > 0 && key.length() <= MAX_KEY_BYTES ) {
 						// System.out.println("Attempting to put - step 2!");
                         String value = null;

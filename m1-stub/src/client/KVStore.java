@@ -54,10 +54,23 @@ public class KVStore implements KVCommInterface {
 		}
 	}
 
+	// @Override
+	// public KVMessage put(String key, String value) throws Exception {
+	// 	return kvComm.sendMessage(StatusType.PUT, key, value);
+	// }
+
 	@Override
 	public KVMessage put(String key, String value) throws Exception {
-		return kvComm.sendMessage(StatusType.PUT, key, value);
+		logger.info("Sending PUT request for key: " + key + " with value: " + value);
+		KVMessage response = kvComm.sendMessage(StatusType.PUT, key, value);
+		if (response != null) {
+			logger.info("Received PUT response: " + response.getStatus() + " for key: " + response.getKey());
+		} else {
+			logger.error("Received null response for PUT request for key: " + key);
+		}
+		return response;
 	}
+
 
 	// @Override
 	// public KVMessage get(String key) throws Exception {

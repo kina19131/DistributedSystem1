@@ -1,5 +1,7 @@
 package app_kvServer;
 
+import java.util.logging.FileHandler;
+import java.util.logging.SimpleFormatter;
 import java.io.*;
 import java.net.*;
 import java.util.*;
@@ -22,6 +24,8 @@ public class KVServer implements IKVServer {
 	 *           currently not contained in the cache. Options are "FIFO", "LRU",
 	 *           and "LFU".
 	 */
+
+	private String storagePath;
 
 	private ServerSocket serverSocket;
 	private int port;
@@ -74,7 +78,13 @@ public class KVServer implements IKVServer {
 		};
 	}
 
-	
+	public void setStoragePath(String storageDir) throws IOException {
+		File dir = new File(storageDir);
+		if (!dir.exists() || !dir.isDirectory()) {
+			throw new IOException("The provided storage directory does not exist or is not a directory.");
+		}
+		this.storagePath = storageDir;
+	}
 
 	
 	@Override
@@ -151,6 +161,7 @@ public class KVServer implements IKVServer {
 		// TODO Auto-generated method stub
 		// LOGGER.info("Attempting to put key: " + key + ", value: " + value);
 		try{
+
 			if (value == null || "null".equals(value)) {
 				if (storage.containsKey(key)) {
 					storage.remove(key);
@@ -322,7 +333,7 @@ public class KVServer implements IKVServer {
 	}
 
 	private void loadDataFromStorage() {
-		String filePath = "kvstorage.txt"; // Relative path to the file
+		String filePath = storagePath + File.separator + "kvstorage.txt"; // Relative path to the file
 		File file = new File(filePath);
 	
 		try {
@@ -385,7 +396,9 @@ public class KVServer implements IKVServer {
 
 
 	private void saveDataToStorage() {
-		try (BufferedWriter writer = new BufferedWriter(new FileWriter("kvstorage.txt"))) {
+		String filePath = storagePath + File.separator + "kvstorage.txt";
+
+		try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
 			for (Entry<String, String> entry : storage.entrySet()) {
 				writer.write(entry.getKey() + "," + entry.getValue());
 				writer.newLine();
@@ -444,26 +457,85 @@ public class KVServer implements IKVServer {
 		LOGGER.info("Server Socket Closed");
 	}
 
-	public static void main(String[] args) {
-		// Default values
-		int port = 50005;
-		int cacheSize = 10; // Example default cache
-		String ipAddress = "127.0.0.1";
-		String strategy = "FIFO";
+	
+	// public static void main(String[] args) {
+	// 	// Default values
+	// 	int port = 50000;
+	// 	int cacheSize = 10; 
+	// 	String ipAddress = "127.0.0.1";
+	// 	String strategy = "FIFO";
 		
-		// Parse command line arguments
+	// 	// Parse command line arguments
+	// 	for (int i = 0; i < args.length; i++) {
+	// 		if ("-p".equals(args[i]) && i + 1 < args.length) {
+	// 			port = Integer.parseInt(args[i + 1]);
+	// 		}
+	// 		if ("-a".equals(args[i]) && i + 1 < args.length) {
+	// 			ipAddress = args[i + 1];
+	// 		}
+			
+	// 	}
+	
+	// 	// Initialize and start the server
+	// 	KVServer server = new KVServer(port, cacheSize, strategy);
+    // 	server.run();
+	// }
+
+
+	public static void main(String[] args) {
+		int port = 50000; // Default port
+		int cacheSize = 10; // Example default cache size
+		String strategy = "FIFO"; // Default strategy
+		String address = "localhost"; // Default address
+		String logFilePath = System.getProperty("user.dir") + File.separator+ "src" + File.separator + "logger"+ File.separator + "server.log"; // Default log file path
+		Level logLevel = Level.ALL; // Default log level
+		String storageDir = System.getProperty("user.dir") + File.separator+ "src" + File.separator + "logger"; // Default storage directory
+
 		for (int i = 0; i < args.length; i++) {
-			if ("-p".equals(args[i]) && i + 1 < args.length) {
-				port = Integer.parseInt(args[i + 1]);
-			}
-			if ("-a".equals(args[i]) && i + 1 < args.length) {
-				ipAddress = args[i + 1];
+			switch (args[i]) {
+				case "-p":
+					if (i + 1 < args.length) port = Integer.parseInt(args[++i]);
+					break;
+				case "-a":
+					if (i + 1 < args.length) address = args[++i];
+					break;
+				case "-d":
+					if (i + 1 < args.length) storageDir = args[++i];
+					break;
+				case "-l":
+					if (i + 1 < args.length) logFilePath = args[++i];
+					break;
+				case "-ll":
+					if (i + 1 < args.length) logLevel = Level.parse(args[++i]);
+					break;
+				case "-h":
+					// Display help information
+					System.out.println("Usage: java -jar KVServer.jar [-p port] [-a address] [-d storageDir] [-l logFilePath] [-ll logLevel]");
+					System.exit(0);
+					break;
 			}
 		}
-	
+
+		try {
+			FileHandler fileHandler = new FileHandler(logFilePath, true);
+			fileHandler.setFormatter(new SimpleFormatter());
+			LOGGER.addHandler(fileHandler);
+			LOGGER.setLevel(logLevel);
+		} catch (IOException e) {
+			System.err.println("Error setting up logger: " + e.getMessage());
+			System.exit(1);
+		}
+
 		// Initialize and start the server
 		KVServer server = new KVServer(port, cacheSize, strategy);
-    	server.run();
+		try {
+			server.setStoragePath(storageDir);
+		} catch (IOException e) {
+			System.err.println("Error setting storage directory: " + e.getMessage());
+			System.exit(1);
+		}
+		server.run();
 	}
+
 	
 }
