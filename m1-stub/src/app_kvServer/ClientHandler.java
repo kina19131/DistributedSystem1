@@ -56,7 +56,6 @@ public class ClientHandler implements Runnable {
                                 boolean inStorage = server.inStorage(requestMessage.getKey()); 
                                 boolean inCache = server.inCache(requestMessage.getKey()); 
 
-                                //if (requestMessage.getValue() == "null" || requestMessage.getValue().isEmpty()){ // NO VALUE (DELETE)
                                 if ("null".equals(requestMessage.getValue()) || requestMessage.getValue().isEmpty()){
 
                                     LOGGER.info("\n ...DELETE IN PROGRESS... \n");
@@ -73,7 +72,7 @@ public class ClientHandler implements Runnable {
 
                                 else{ // GOT VALUE (UPDATE / PUT)
                                     server.putKV(requestMessage.getKey(), requestMessage.getValue());
-                                    boolean isUpdate = inStorage || inCache; // Updated condition
+                                    boolean isUpdate = inStorage || inCache; 
                                     responseType = isUpdate ? StatusType.PUT_UPDATE : StatusType.PUT_SUCCESS;
                                 }
                                 responseMessage = new SimpleKVMessage(responseType, requestMessage.getKey(), requestMessage.getValue());
@@ -103,8 +102,7 @@ public class ClientHandler implements Runnable {
                         LOGGER.info("responseString: "+ responseMessage.getMsg());
                     }
                 } catch (SocketException se) {
-                                // Handle the socket exception (e.g., client disconnected)
-                                LOGGER.info("Client disconnected."); // ## MODIFIED
+                                LOGGER.info("Client disconnected."); 
                                 isOpen = false;
                 } catch (IOException ioe) {
 				    LOGGER.log(Level.ERROR, "Error! Connection Lost!", ioe);
