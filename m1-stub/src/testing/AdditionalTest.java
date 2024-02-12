@@ -106,10 +106,16 @@ public class AdditionalTest extends TestCase {
     // Test Case 5: Put Empty Value (Delete Key)
     @Test
     public void testPutEmptyValue() {
-        String key = "this_key";
+        String key = "empty_key";
         String value = "";
         KVMessage response = null;
         Exception ex = null;
+
+        try {
+            response = kvClient.put(key, "initial_value");
+        } catch (Exception e) {
+            ex = e;
+        }
 
         try {
             response = kvClient.put(key, value);
@@ -146,6 +152,17 @@ public class AdditionalTest extends TestCase {
     // Test Case 7: Get After Disconnect
     @Test
     public void testGetAfterDisconnect() {
+        KVMessage response = null;
+        Exception ex = null;
+        String key = "key_testGetAfterDisconnect";
+        String value = "value_testGetAfterDisconnect";
+        try {
+            response = kvClient.put(key, value);
+        } catch (Exception e) {
+            ex = e;
+        }
+
+        // Step 1: Disconnect the client from the server
         kvClient.disconnect();
 
         Exception reconnectionEx = null;
@@ -157,9 +174,7 @@ public class AdditionalTest extends TestCase {
 
         assertTrue("Reconnection failed?", reconnectionEx == null);
 
-        String key = "VeryLongKey";
-        KVMessage response = null;
-        Exception ex = null;
+        // Step 3: Attempt to get the key
         try {
             response = kvClient.get(key);
         } catch (Exception e) {
